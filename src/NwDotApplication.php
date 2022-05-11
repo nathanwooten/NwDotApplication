@@ -363,9 +363,7 @@ class NwDotApplication extends ArrayObject implements ApplicationInterface
 	public static function getInstance()
 	{
 
-		$class = Application::class;
-
-		return new $class( ...func_get_args() );
+		return new static( ...func_get_args() );
 
 	}
 
