@@ -24,7 +24,9 @@ class NwDotApplication extends ArrayObject implements ApplicationInterface
 	public $container = [];
 
 	public $init = [];
+
 	public $response = null;
+	public $responseKey = null;
 
 	public $defaultResolver = null;
 	public $defaultReponse = null;
@@ -54,7 +56,6 @@ class NwDotApplication extends ArrayObject implements ApplicationInterface
 		}
 
 		$this->init->setCallbacks( $inits );
-		$this->init->invoke();
 
 		$this->setCallbacks( new Callback( 'init', $this->init ) );
 
@@ -330,6 +331,20 @@ class NwDotApplication extends ArrayObject implements ApplicationInterface
 		}
 
 		return $value;
+
+	}
+
+	public function setResponseKey( $responseKey )
+	{
+
+		$this->responseKey = $responseKey;
+
+	}
+
+	public function getResponseKey()
+	{
+
+		return $this->responseKey;
 
 	}
 
