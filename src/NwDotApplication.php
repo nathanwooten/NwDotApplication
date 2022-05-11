@@ -143,6 +143,8 @@ class NwDotApplication extends ArrayObject implements ApplicationInterface
 		while( $iterator->isValid() && ! isset( $this->response ) ) {
 
 			$response = $this->call( $iterator->current() );
+
+			$iterator->next();
 		}
 
 		return $response;
