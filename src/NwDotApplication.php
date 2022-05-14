@@ -2,12 +2,20 @@
 
 namespace NwDot\Application;
 
-use ArrayObject;
+use Exception;
+
+use ArrayIterator;
+use Iterator;
+use IteratorAggregate;
+use Traversable;
 
 use NwDot\{
 
 	Application\NwDotApplicationInterface as ApplicationInterface,
-	Application\NwDotResponseInterface as Response
+	Application\NwDotCallback as Callback,
+	Application\NwDotCallbackInterface as CallbackInterface,
+	Application\NwDotContainerInstanceResolver as ContainerInstanceResolver,
+	Application\NwDotApplicationResponse as ApplicationResponse
 
 };
 
@@ -18,64 +26,124 @@ use Psr\{
 };
 
 if ( ! class_exists( __NAMESPACE__ . '\\' . basename( __FILE__, '.php' ) ) ) {
-class NwDotApplication extends ArrayObject implements ApplicationInterface
+class NwDotApplication implements IteratorAggregate, ApplicationInterface
 {
 
+	const APPLICATION = 'application';
+
+	const RAWKEY_NAME = 0;
+	const RAWKEY_CALLBACK = 1;
+	const RAWKEY_ARGS = 2;
+	const RAWKEY_CONTEXT = 3;
+
+	const RAWKEY = [
+		'name' => 'RAWKEY_NAME',
+		'callback' => 'RAWKEY_CALLBACK',
+		'args' => 'RAWKEY_ARGS',
+		'context' => 'RAWKEY_CONTEXT'
+	];
+
 	public $container = [];
+	public Iterator $iterator;
+
+	public ContainerInterface $service;
 
 	public $init = [];
 
 	public $response = null;
 	public $responseKey = null;
 
-	public $defaultResolver = null;
-	public $defaultReponse = null;
+	public $defaultResolver = ContainerInstanceResolver::class;
+	public $defaultReponse = ApplicationResponse::class;
 
 	public static $exceptions = [];
 	public static $debug = 0;
 
 	public static $instance = [];
 
-	public function __construct( ContainerInterface $container, $init = [] )
+	public function __construct( ContainerInterface $container, array $callbacks = [] )
 	{
 
-		$this->initialize = $this->initialize( ...func_get_args() );
+		$this->setContainer( $container );
+		$this->setCallbacks( $callbacks );
 
 	}
 
-	protected function initialize( $inits = [] )
+	public function getIterator() : Traversable
 	{
 
-		static::$instance[] = $this;
-
-		$this->init = new static;
-		foreach ( $inits as $init ) {
-			if ( isset( $init[0][0] ) && is_a( $init[0][0], static::class ) ) {
-				$init[0][0] = $this;
-			}
+		if ( ! isset( $this->iterator ) ) {
+			$this->iterator = new ArrayIterator( $this->getCallbacks() );
 		}
 
-		$this->init->setCallbacks( $inits );
+		$iterator = $this->iterator;
+		$iterator->rewind();
 
-		$this->setCallbacks( new Callback( 'init', $this->init ) );
-
-	}
-
-	public function setCallbacks( CallbackInterface ...$callbacks )
-	{
-
-		$this->callbacks = $this->callbacks + $callbacks;
+		return $iterator;
 
 	}
 
-	public function toCallbacksArray( array ...$callbacks )
+	public function setContainer( ContainerInterface $container )
 	{
 
-		foreach ( $callbacks as $key => $callback ) {
-			$callbacks[ $key ] = $obj = new Callback( ...array_values( $callback ) );
+		$this->service = $container;
+
+	}
+
+	public function getContainer()
+	{
+
+		return $this->service;
+
+	}
+
+	public function setCallbacks( $callbacks = [] )
+	{
+
+		if ( ! is_array( $callbacks ) ) {
+			throw new Exception( 'Excpecting callbacks array' );
+		}
+
+		$callbacks = $this->toCallbacksArray( $callbacks );
+
+		foreach ( $callbacks as $callback ) {
+			$this->container[ $callback->getName() ] = $callback;
+		}
+
+	}
+
+	public function getCallbacks()
+	{
+
+		return $this->container;
+
+	}
+
+	public function toCallbacksArray( array $raw )
+	{
+
+		$callbacksArray = [];
+
+		foreach ( $raw as $key => $callback ) {
+			if ( ! is_a( $callback, CallbackInterface::class ) ) {
+				if ( is_array( $callback ) ) {
+					$callback = $this->toCallback( ...array_values( $callback ) );
+				} else {
+					throw new Exception( 'Unknwon raw type, expecting array, received, %s', gettype( $callback ) );
+				}
+			}
+			$callbacksArray[ $key ] = $callback;
 		}
 
 		return $callbacksArray;
+
+	}
+
+	public function toCallback( $name, $callback, $args = [], $context = null )
+	{
+
+		$callback = new Callback( ...func_get_args() );
+		return $callback;
 
 	}
 
@@ -141,14 +209,16 @@ class NwDotApplication extends ArrayObject implements ApplicationInterface
 
 		$iterator = $this->getIterator();
 
-		while( $iterator->isValid() && ! isset( $this->response ) ) {
+		while( $iterator->valid() && ! isset( $this->response ) ) {
 
 			$response = $this->call( $iterator->current() );
 
 			$iterator->next();
 		}
 
-		return $response;
+		if ( isset( $response ) ) {
+			return $response;
+		}
 
 	}
 
@@ -156,23 +226,32 @@ class NwDotApplication extends ArrayObject implements ApplicationInterface
 	{
 
 		$callback = $this->resolve( $callback );
+
+var_dump( $callback );
+
+
 		$name = $callback->getName();
 
 		$container = $this->getContainer();
 
-		$args = [];
+		$args = array_values( $callback->getArgs() );
 		$rps = $callback->getParameters();
-		foreach ( $rps as $parameter ) {
+		foreach ( $rps as $key => $parameter ) {
 			$param = $parameter->getName();
 
-			$args[ $param ] = $container->get( $param );
+			if ( ! isset( $args[ $key ] ) ) {
+				$args[ $key ] = $container->get( $param );
+			}
 		}
 		$callback->setArgs( $args );
 
 		$response = $this->getResponse( $callback );
-		$container->set( $name, $response );
 
-		if ( $name !== $this->getResponseKey() ) {
+		if ( ! is_null( $response ) ) {
+			$container->set( $name, $response );
+		}
+
+		if ( $name === $this->getResponseKey() ) {
 			$this->response = $response;
 		}
 
@@ -183,13 +262,12 @@ class NwDotApplication extends ArrayObject implements ApplicationInterface
 	public function resolve( CallbackInterface $callback )
 	{
 
-		$callback->setContainer( $callback );
+		$callback->setContainer( $this->getContainer() );
 
 		$resolver = $this->getResolver( $callback->getResolver() );
 		if ( is_null( $resolver ) ) {
 			return $callback;
 		}
-
 
 		$resolver->setCallback( $callback );
 
@@ -372,7 +450,6 @@ class NwDotApplication extends ArrayObject implements ApplicationInterface
 			case false:
 				return false;
 				break;
-
 		}
 
 	}

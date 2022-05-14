@@ -20,7 +20,9 @@ class NwDotContainerInstanceResolver
 		$callback = $this->getCallback();
 
 		$callable = $callback->getCallback();
-		if ( is_array( $callable ) && $container->has( $callable[0] ) ) ) {
+
+
+		if ( is_array( $callable ) && $container->has( $callable[0] ) ) {
 			$callable[0] = $container->get( $callable[0] );
 		}
 

@@ -6,12 +6,18 @@ use Exception;
 
 use NwDot\{
 
-	Applicatoin\CallbackInterface
+	Application\NwDotCallbackInterface as CallbackInterface
+
+};
+
+use Psr\{
+
+	Container\ContainerInterface
 
 };
 
 if ( ! class_exists( __NAMESPACE__ . '\\' . basename( __FILE__, '.php' ) ) ) {
-class NwDotCallback
+class NwDotCallback implements CallbackInterface
 {
 
 	const TYPE_CALLBACK = 0;
@@ -37,8 +43,12 @@ class NwDotCallback
 	public $rcallback = null;
 	public $rparameters = [];
 
-	public function __construct( $callback = null, $args = null, $context = null )
+	public function __construct( $name = null, $callback = null, $args = null, $context = null )
 	{
+
+		if ( ! is_null( $name ) ) {
+			$this->setName( $name );
+		}
 
 		if ( ! is_null( $callback ) ) {
 			$this->setCallback( $callback );
@@ -63,6 +73,22 @@ class NwDotCallback
 
 		$this->response = $result;
 		return $this->response;
+
+	}
+
+	public function setContainer( ContainerInterface $container )
+	{
+
+		$this->container = $container;
+
+	}
+
+	public function getContainer()
+	{
+
+		if ( isset( $this->container ) ) {
+			return $this->container;
+		}
 
 	}
 
@@ -140,22 +166,6 @@ class NwDotCallback
 
 	}
 
-	public function setResponse( $response = null )
-	{
-
-		$this->response = $response;
-
-	}
-
-	public function getResponse()
-	{
-
-		if ( is_null( $this->response ) ) {
-			return $this->response;
-		}
-
-	}
-
 	public function setName( $name )
 	{
 
@@ -193,7 +203,7 @@ class NwDotCallback
 
 	}
 
-	public function getParamters()
+	public function getParameters()
 	{
 
 		if ( ! isset( $this->rparameters ) ) {
